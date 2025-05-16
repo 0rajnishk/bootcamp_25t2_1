@@ -1,26 +1,27 @@
-from flask import Flask, request
+from flask import Flask, jsonify, request
 from flask_restful import Api, Resource
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
-
+from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required, JWTManager
 
 
 app = Flask(__name__)
 
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///project.db"
-
+app.config["JWT_SECRET_KEY"] = "aStrongSecretKey"  # Change this!
+jwt = JWTManager(app)
 
 api = Api(app)
 db = SQLAlchemy(app)
 
-CORS(app, resources={r"/api/*": {"origins": "*"}})
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password = db.Column(db.String(120), nullable=False)
-    role = db.Column(db.String(20), nullable=False) #admin, manager, employee
+    role = db.Column(db.String(20), nullable=False, default='employee') #admin, manager, employee
     is_approved = db.Column(db.Boolean, default=False)
 
     def to_json(self):
@@ -51,17 +52,16 @@ class Task(db.Model):
             'assigned_user_id': self.assigned_user_id
         }
 
-with app.app_context():
-    db.create_all()
 
 class HelloWorld(Resource):
-    def get(self):
-        return 'hello world'
     
+    def get(self):
+        return {"msg":'get from hello world'}
+    
+    @jwt_required()
     def post(self):
-        data = request.get_json()
-        name = data['username']
-        return 'hello ' + name
+        user_name = get_jwt_identity()
+        return 'hello ' + user_name
 
 class SignupResource(Resource):
     def post(self):
@@ -70,15 +70,70 @@ class SignupResource(Resource):
             username=data['username'],
             email=data['email'],
             password=data['password'],
-            role=data['role']
+            # role=data['role']
         )
         db.session.add(new_user)
         db.session.commit()
         return new_user.to_json(), 201
     
+class LoginResource(Resource):
+    def post(self):
+        data = request.get_json()
+        user = User.query.filter_by(email=data['email'], password=data['password']).first()
 
-api.add_resource(HelloWorld, '/api/')
-api.add_resource(SignupResource, '/api/signup')
+        if user:
+            access_token=create_access_token(identity=user.username)
+            print(access_token)
+
+            return {'token':access_token, 'message':'successfully logged in'}, 200
+        else:
+            return {'message': 'Invalid credentials'}, 401
+
+class AdminResource(Resource):
+    
+    def get(self):
+        users = User.query.filter_by(is_approved=False).all()
+        J_users = []
+        for user in users:
+            user_details = {'user_id': user.id, 'username': user.username, 'email': user.email}
+            J_users.append(user_details)
+        return jsonify(J_users)
+
+    # @jwt_required()
+    def post(self):
+        data = request.json
+        
+        user_id = data['user_id']
+        user = User.query.get(user_id)
+        if user:
+            user.is_approved = True
+            db.session.commit()
+ 
+
+        return "post from admin resource"
+
+api.add_resource(HelloWorld, '/')
+api.add_resource(SignupResource, '/signup')
+api.add_resource(LoginResource, '/login')
+api.add_resource(AdminResource, '/admin')
+
+
+def create_admin():
+    with app.app_context():
+        db.create_all()
+        admin = User.query.filter_by(role='admin').first()
+        if not admin:
+            admin = User(
+                username='admin',
+                email='admin@mail.com',
+                password='admin@123',
+                role='admin',
+                is_approved=True
+            )
+            db.session.add(admin)
+            db.session.commit()
+
 
 if __name__ == '__main__':
+    create_admin()
     app.run()
