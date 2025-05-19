@@ -1,4 +1,5 @@
 <template>
+    <h2>Admin Dashboard</h2>
 
     <ul v-for="user in users">
         <li>

@@ -5,7 +5,7 @@
     <form @submit.prevent="adminLogin">
         <input type="email" v-model="email" placeholder="Email" required>
         <input type="password" v-model="password" placeholder="Password" required>
-        <button type="submit">Signup</button>
+        <button type="submit">login</button>
 
     </form>
 
