@@ -1,0 +1,220 @@
+from datetime import datetime
+
+from flask import Flask, jsonify, request
+from flask_restful import Api, Resource
+from flask_sqlalchemy import SQLAlchemy
+from flask_cors import CORS
+from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required, JWTManager
+
+
+app = Flask(__name__)
+
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///project.db"
+app.config["JWT_SECRET_KEY"] = "aStrongSecretKey"
+jwt = JWTManager(app)
+
+api = Api(app)
+db = SQLAlchemy(app)
+
+CORS(app, resources={r"/*": {"origins": "*"}})
+
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password = db.Column(db.String(120), nullable=False)
+    role = db.Column(db.String(20), nullable=False, default='employee') #admin, manager, employee
+    is_approved = db.Column(db.Boolean, default=False)
+
+    def to_json(self):
+        return {
+            'id': self.id,
+            'username': self.username,
+            'email': self.email,
+            'role': self.role,
+            'is_approved': self.is_approved
+        }
+
+
+class Task(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(80), nullable=False)
+    description = db.Column(db.String(200), nullable=False)
+    status = db.Column(db.String(20), nullable=False) #open, in progress, closed
+    deadline = db.Column(db.DateTime, nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False)
+    assigned_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+
+    def to_json(self):
+        return {
+            'id': self.id,
+            'title': self.title,
+            'description': self.description,
+            'status': self.status,
+            'assigned_user_id': self.assigned_user_id
+        }
+
+
+def get_current_user():
+    username = get_jwt_identity()
+    user = User.query.filter_by(username=username).first()
+    return user
+
+def role_required(allowed_roles=["admin"]):
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            user = get_current_user()
+            print(user.username)
+            if user is None:
+                print("user not found")
+                print(allowed_roles[1])
+                return "User not found"
+            if user.role not in allowed_roles:
+                print("you are not an admin")
+                return "Unathorized access"
+            return func(*args, **kwargs)  # Make sure to call the actual function
+        return wrapper
+    return decorator
+
+
+class HelloWorld(Resource):
+    def get(self):
+        return {"msg":'get from hello world'}
+    
+    @jwt_required()
+    def post(self):
+        user_name = get_jwt_identity()
+        return 'hello ' + user_name
+
+class SignupResource(Resource):
+    def post(self):
+        data = request.get_json()
+        new_user = User(
+            username=data['username'],
+            email=data['email'],
+            password=data['password'],
+            # role=data['role']
+        )
+        db.session.add(new_user)
+        db.session.commit()
+        return new_user.to_json(), 201
+    
+class LoginResource(Resource):
+    def post(self):
+        data = request.get_json()
+        user = User.query.filter_by(email=data['email'], password=data['password']).first()
+
+        if user:
+            access_token=create_access_token(identity=user.username)
+            print(access_token)
+
+            return {'token':access_token, 'message':'successfully logged in'}, 200
+        else:
+            return {'message': 'Invalid credentials'}, 401
+        
+    @jwt_required()
+    def get(self):
+        return {"message":'success'}, 200
+
+class UsersResource(Resource):
+    def get(self):
+        users = User.query.filter_by(is_approved=False).all()
+        J_users = []
+        for user in users:
+            user_details = {'user_id': user.id, 'username': user.username, 'email': user.email}
+            J_users.append(user_details)
+        return jsonify(J_users)
+
+    @jwt_required()
+    @role_required(['admin'])
+    def post(self):
+        data = request.json
+        print('post method')
+        user_id = data['user_id']
+        user = User.query.get(user_id)
+        if user:
+            user.is_approved = True
+            db.session.commit()
+        return {"msg":"successfully approved the user"}
+    
+    @jwt_required()
+    @role_required(['admin'])
+    def delete(self):
+        data = request.json
+        print('post method')
+        user_id = data['user_id']
+        user = User.query.get(user_id)
+        if not user:
+            return {"msg": "User not found"}
+        db.session.delete(user)
+        db.session.commit()
+        return {"msg":"User deleted successfully"}
+
+
+class TaskResourse(Resource):
+    @jwt_required()
+    @role_required(["admin", "manager"])
+    def get(self, task_id=None):
+        if task_id:
+            task = Task.query.get(task_id)
+            if not task:
+                return "no task available"
+            return task.to_json()
+        
+        tasks = Task.query.all()
+        all_tasks = []
+        for task in tasks:
+            all_tasks.append(task.to_json())
+        return all_tasks
+    
+    @jwt_required()
+    @role_required(["admin", "manager"])
+    def post(self):
+        data = request.json
+        title = data['title']
+        description = data['description']
+        status = data['status']
+        assigned_user_id = data['assigned_user_id']
+        deadline = data['deadline']
+        deadline = datetime.strptime(deadline, '%Y-%m-%d %H:%M:%S')
+
+        print(deadline)
+        task = Task(
+            title=title,
+            description=description,
+            status=status,
+            assigned_user_id=assigned_user_id,
+            deadline=deadline,
+            created_at=datetime.now()
+        )
+        db.session.add(task)
+        db.session.commit()
+        return {"msg": "Task created successfully"}, 201
+
+api.add_resource(HelloWorld, '/')
+api.add_resource(SignupResource, '/signup')
+api.add_resource(LoginResource, '/login')
+api.add_resource(UsersResource,'/admin', '/admin/<int:user_id>')
+api.add_resource(TaskResourse, '/task/<int:task_id>', '/task')
+
+
+
+def create_admin():
+    with app.app_context():
+        db.create_all()
+        admin = User.query.filter_by(role='admin').first()
+        if not admin:
+            admin = User(
+                username='admin',
+                email='admin@mail.com',
+                password='admin@123',
+                role='admin',
+                is_approved=True
+            )
+            db.session.add(admin)
+            db.session.commit()
+
+
+if __name__ == '__main__':
+    create_admin()
+    app.run()

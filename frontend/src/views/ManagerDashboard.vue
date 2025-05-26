@@ -48,13 +48,17 @@ export default {
     data() {
         return {
             tasks: [],
+            users: [], // Holds all users for task assignment
             message: '',
             editingTask: null // Holds the task being edited
         };
     },
+
     created() {
         this.fetchTasks();
+        this.fetchAllUsers(); // Fetch all users on component creation
     },
+
     methods: {
         getAuthHeaders() {
             const token = localStorage.getItem('token');
@@ -66,8 +70,25 @@ export default {
         },
         async fetchTasks() {
             try {
-                const response = await axios.get('http://127.0.0.1:5000/task', this.getAuthHeaders());
+                const token = localStorage.getItem('token');
+                const response = await axios.get('http://127.0.0.1:5000/task', 
+                    {
+                        headers: {
+                            Authorization: `Bearer ${token}`
+                        } 
+                    }
+                );
                 this.tasks = response.data;
+            } catch (error) {
+                this.message = error.response?.data?.message || 'Failed to fetch tasks.';
+                console.error('Error fetching tasks:', error);
+            }
+        },
+        async fetchAllUsers(){
+            try {
+                const response = await axios.get('http://127.0.0.1:5000/all_users', this.getAuthHeaders());
+                this.users = response.data;
+                alert(JSON.stringify(this.users));
             } catch (error) {
                 this.message = error.response?.data?.message || 'Failed to fetch tasks.';
                 console.error('Error fetching tasks:', error);
@@ -116,3 +137,4 @@ export default {
     }
 };
 </script>
+

@@ -5,11 +5,11 @@
       <input type="text" v-model="username" placeholder="Username" required>
       <input type="email" v-model="email" placeholder="Email" required>
       <input type="password" v-model="password" placeholder="Password" required>
-      <select name="role" id="role">
-        <!-- <option value="admin">Admin</option> -->
+      <!-- <select name="role" id="role">
         <option value="employee">Employee</option>
         <option value="manager">Manager</option>
-      </select>
+      </select> -->
+      <input type="file" accept="application/pdf" @change="handlefile()" required>
       <button type="submit">Signup</button>
     </form>
     <p v-if="message">{{ message }}</p>
@@ -25,14 +25,28 @@ export default {
       username: '',
       email: '',
       password: '',
-      role: 'employee', 
+      role: 'employee',
+      file: null, // To hold the file input 
       message: '' // To display success or error messages
     }
   },
   methods: {
+    handlefile() {
+      const fileInput = document.querySelector('input[type="file"]');
+      if (fileInput.files.length > 0) {
+        this.file = fileInput.files[0];
+      } else {
+        this.file = null;
+      }
+    },
+
     async signupUser() {
       try {
         const response = await axios.post('http://127.0.0.1:5000/signup', {
+          Headers: {
+            'Content-Type': 'multipart/form-data'
+          },
+          file: this.file, 
           username: this.username,
           email: this.email,
           password: this.password,

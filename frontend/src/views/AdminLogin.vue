@@ -23,6 +23,9 @@ export default {
             password: ''
         }
     },
+    computed:{
+        // You can add computed properties here if needed
+    },
     methods: {
         async adminLogin() {
             const response = await axios.post('http://127.0.0.1:5000/login',
