@@ -17,8 +17,13 @@
             </select>
         </div>
         <div>
-            <label for="assigned_user_id">Assigned User ID:</label>
-            <input type="number" id="assigned_user_id" v-model="assigned_user_id" required>
+            <label for="assigned_user_id">Assign to User:</label>
+            <select id="assigned_user_id" v-model="assigned_user_id" required>
+                <option value="" disabled>Select a user</option>
+                <option v-for="user in users" :key="user.user_id" :value="user.user_id">
+                    {{ user.username }}
+                </option>
+            </select>
         </div>
         <div>
             <label for="deadline">Deadline:</label>
@@ -40,9 +45,14 @@ export default {
             status: 'open',
             assigned_user_id: null,
             deadline: '',
-            message: ''
+            message: '',
+            users: [] // This can be used to fetch and display users if needed
         };
     },
+    created() {
+        this.fetchAllUsers(); // Fetch all users when the component is created
+    },
+    
     methods: {
         getAuthHeaders() {
             const token = localStorage.getItem('token');
@@ -52,6 +62,19 @@ export default {
                 }
             };
         },
+
+        async fetchAllUsers() {
+            try {
+                const response = await axios.get('http://127.0.0.1:5000/all_users', this.getAuthHeaders());
+                this.users = response.data;
+                alert(JSON.stringify(this.users));
+            } catch (error) {
+                this.message = error.response?.data?.message || 'Failed to fetch tasks.';
+                console.error('Error fetching tasks:', error);
+            }
+        },
+
+
         async createTask() {
             try {
                 const formattedDeadline = this.deadline.replace('T', ' ') + ':00'; // "YYYY-MM-DD HH:MM:SS"

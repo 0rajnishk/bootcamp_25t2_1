@@ -1,10 +1,11 @@
 from datetime import datetime
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 from flask_restful import Api, Resource
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required, JWTManager
 from werkzeug.security import generate_password_hash, check_password_hash
+import os
 
 # Create a Flask web application
 app = Flask(__name__)
@@ -24,6 +25,13 @@ db = SQLAlchemy(app)
 # Enable Cross-Origin Resource Sharing (CORS) for all routes
 # This allows requests from different domains to access your API
 CORS(app, resources={r"/*": {"origins": "*"}})
+
+# Directory to save uploaded documents
+UPLOAD_FOLDER = os.path.abspath(os.path.join(os.path.dirname(__file__), '../uploads'))
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
+
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 # Define the User model for the database
 class User(db.Model):
@@ -123,7 +131,7 @@ class SignupResource(Resource):
     def post(self):
         # Get user data from the request body
         data = request.get_json()
-        file = request.files['file']
+
         # Create a new User object
         new_user = User(
             username=data['username'],
@@ -189,6 +197,7 @@ class UsersResource(Resource):
     @jwt_required()
     @role_required(['admin'])
     def get(self):
+        print("Fetching unapproved users")
         # Get all users who are not yet approved
         users = User.query.filter_by(is_approved=False).all()
         all_users = []
@@ -365,6 +374,19 @@ class TaskResource(Resource):
         db.session.commit()
         return {"msg": "Task deleted successfully"}, 200
 
+@app.route('/upload_document', methods=['POST'])
+@jwt_required()
+def upload_document():
+    if 'document' not in request.files:
+        return jsonify({'message': 'No file part in the request'}), 400
+    file = request.files['document']
+    if file.filename == '':
+        return jsonify({'message': 'No selected file'}), 400
+    # Optionally, you can add more validation here (e.g., allowed file types)
+    filename = file.filename
+    save_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    file.save(save_path)
+    return jsonify({'message': 'File uploaded successfully', 'filename': filename}), 200
 
 # Add API resources to specific URLs
 api.add_resource(HelloWorld, '/') # Home endpoint

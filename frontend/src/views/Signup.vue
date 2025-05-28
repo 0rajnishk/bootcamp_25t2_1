@@ -9,7 +9,6 @@
         <option value="employee">Employee</option>
         <option value="manager">Manager</option>
       </select> -->
-      <input type="file" accept="application/pdf" @change="handlefile()" required>
       <button type="submit">Signup</button>
     </form>
     <p v-if="message">{{ message }}</p>
@@ -39,14 +38,9 @@ export default {
         this.file = null;
       }
     },
-
     async signupUser() {
       try {
         const response = await axios.post('http://127.0.0.1:5000/signup', {
-          Headers: {
-            'Content-Type': 'multipart/form-data'
-          },
-          file: this.file, 
           username: this.username,
           email: this.email,
           password: this.password,

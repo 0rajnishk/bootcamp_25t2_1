@@ -17,7 +17,17 @@
         </ul>
         <p v-else>No tasks assigned to you.</p>
     </div>
+<div>
+    <h3>Upload Document</h3>
+    <form @submit.prevent="uploadDocument" enctype="multipart/form-data">
+        <input type="file" @change="handleFileChange" required>
+        <button type="submit">Upload</button>
+    </form>
+</div>
+<p v-if="uploadMessage">{{ uploadMessage }}</p>
 </template>
+    
+
 
 <script>
 import axios from 'axios';
@@ -26,7 +36,8 @@ export default {
     data() {
         return {
             myTasks: [],
-            message: ''
+            message: '',
+            selectedFile: null,
         };
     },
     created() {
@@ -60,7 +71,38 @@ export default {
                 this.message = error.response?.data?.message || 'Failed to update task status.';
                 console.error('Error updating task status:', error);
             }
-        }
+        },
+        handleFileChange(event) {
+            const file = event.target.files[0];
+            this.selectedFile = file;
+        },
+        async uploadDocument() {
+            if (!this.selectedFile) {
+                this.uploadMessage = 'Please select a file to upload.';
+                return;
+            }
+            const formData = new FormData();
+            formData.append('document', this.selectedFile);
+
+            try {
+                const token = localStorage.getItem('token');
+                const response = await axios.post(
+                    'http://127.0.0.1:5000/upload_document',
+                    formData,
+                    {
+                        headers: {
+                            'Content-Type': 'multipart/form-data',
+                            Authorization: `Bearer ${token}`
+                        }
+                    }
+                );
+                this.uploadMessage = response.data.msg || 'Document uploaded successfully!';
+                this.selectedFile = null;
+            } catch (error) {
+                this.uploadMessage = error.response?.data?.message || 'Failed to upload document.';
+                console.error('Error uploading document:', error);
+            }
+        },
     }
 };
 </script>

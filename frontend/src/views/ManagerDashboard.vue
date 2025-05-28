@@ -56,7 +56,6 @@ export default {
 
     created() {
         this.fetchTasks();
-        this.fetchAllUsers(); // Fetch all users on component creation
     },
 
     methods: {
@@ -79,16 +78,6 @@ export default {
                     }
                 );
                 this.tasks = response.data;
-            } catch (error) {
-                this.message = error.response?.data?.message || 'Failed to fetch tasks.';
-                console.error('Error fetching tasks:', error);
-            }
-        },
-        async fetchAllUsers(){
-            try {
-                const response = await axios.get('http://127.0.0.1:5000/all_users', this.getAuthHeaders());
-                this.users = response.data;
-                alert(JSON.stringify(this.users));
             } catch (error) {
                 this.message = error.response?.data?.message || 'Failed to fetch tasks.';
                 console.error('Error fetching tasks:', error);
