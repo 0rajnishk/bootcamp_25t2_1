@@ -6,7 +6,11 @@ from flask_cors import CORS
 from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required, JWTManager
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
-
+from dotenv import load_dotenv
+from celery.schedules import crontab
+from flask_caching import Cache
+from flask_mail import Mail, Message
+from celery import Celery
 # Create a Flask web application
 app = Flask(__name__)
 
@@ -25,6 +29,62 @@ db = SQLAlchemy(app)
 # Enable Cross-Origin Resource Sharing (CORS) for all routes
 # This allows requests from different domains to access your API
 CORS(app, resources={r"/*": {"origins": "*"}})
+
+
+
+# ==========================
+# Flask-Mail Configuration
+# ==========================
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = os.getenv('MAIL_USER')
+app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASS')
+app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_USER')
+
+mail = Mail(app)
+
+
+# ==========================
+# Celery Configuration (Updated)
+# ==========================
+app.config['broker_url'] = os.getenv('BROKER_URL', 'redis://localhost:6379/0')
+app.config['result_backend'] = os.getenv('RESULT_BACKEND', 'redis://localhost:6379/0')
+
+celery = Celery(app.name, broker=app.config['broker_url'], backend=app.config['result_backend'])
+celery.conf.broker_connection_retry_on_startup = True  # Fix Celery 6.0 deprecation warning
+
+
+# ==========================
+# Redis Cache Setup
+# ==========================
+cache = redis.StrictRedis(host='localhost', port=6379, db=0, decode_responses=True)
+
+
+
+# ==========================
+# Celery Initialization
+# ==========================
+def init_celery(flask_app):
+    celery_app = Celery(
+        flask_app.import_name,
+        broker=flask_app.config['broker_url'],
+        backend=flask_app.config['result_backend']
+    )
+    celery_app.conf.update(flask_app.config)
+    celery_app.conf.broker_connection_retry_on_startup = True  # Ensure retry on startup
+
+    class ContextTask(celery_app.Task):
+        def __call__(self, *args, **kwargs):
+            with flask_app.app_context():
+                return super().__call__(*args, **kwargs)
+
+    celery_app.Task = ContextTask
+    return celery_app
+
+celery = init_celery(app)
+
+
 
 # Directory to save uploaded documents
 UPLOAD_FOLDER = os.path.abspath(os.path.join(os.path.dirname(__file__), '../uploads'))
